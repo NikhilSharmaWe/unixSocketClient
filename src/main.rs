@@ -42,7 +42,7 @@ impl ScalerizeClient {
         let data = &response[1..];
         
         println!("Server Response Status: {}", status);
-        println!("Raw Response Data: {:?}", data);
+        // println!("Raw Response Data: {:?}", data);
         if let Ok(text) = String::from_utf8(data.to_vec()) {
             println!("Response as text: {}", text);
         }
@@ -74,7 +74,7 @@ impl ScalerizeClient {
         self.stream.flush()?;
 
         let response = self.read_full_response()?;
-        println!("RESPONSE FOR GET: {:?}", response);
+        // println!("RESPONSE FOR GET: {:?}", response);
         let status = response[0];
         let data = response[1..].to_vec();
 
@@ -102,7 +102,7 @@ impl ScalerizeClient {
         self.stream.flush()?;
 
         let response = self.read_full_response()?;
-        println!("RESPONSE FOR PUT: {:?}", response);
+        // println!("RESPONSE FOR PUT: {:?}", response);
         if response[0] == STATUS_ERROR {
             let error_msg = String::from_utf8_lossy(&response[1..]).into_owned();
             return Err(ClientError::OperationFailed(error_msg));
@@ -188,43 +188,96 @@ impl ScalerizeClient {
     }
 }
 
-fn main() -> Result<(), ClientError> {
-    let mut client = ScalerizeClient::connect()?;
+#[divan::bench]
+fn bench_put_operation(bencher: divan::Bencher) {
+    let n: u32 = 1000;
+    bencher
+        .counter(divan::counter::ItemsCount::new(n))
+        .bench_local(move || {
+            let mut client = ScalerizeClient::connect().expect("Failed to connect");
+            let store_number = 2u8;
+            let key = vec![1, 2, 3, 4];
+            let value = b"Hello, Scalerize!";
+            client.put(store_number, &key, value).expect("Put failed");
+        });
+}
 
+#[divan::bench]
+fn bench_get_operation(bencher: divan::Bencher) {
+    let n: u32 = 1000;
+    // Setup initial data
+    let mut client = ScalerizeClient::connect().expect("Failed to connect");
     let store_number = 2u8;
     let key = vec![1, 2, 3, 4];
     let value = b"Hello, Scalerize!";
-    
-    println!("Putting data...");
-    client.put(store_number, &key, value)?;
+    client.put(store_number, &key, value).expect("Setup put failed");
+    client.write().expect("Setup write failed");
 
-    println!("Writing changes...");
-    client.write()?;
+    bencher
+        .counter(divan::counter::ItemsCount::new(n))
+        .bench_local(move || {
+            client.get(store_number, &key).expect("Get failed");
+        });
+}
 
-    println!("Getting data...");
-    match client.get(store_number, &key) {
-        Ok(retrieved_value) => {
-            println!("Operation successful!");
-            println!("Retrieved value as string: {}", String::from_utf8_lossy(&retrieved_value));
-        }
-        Err(e) => {
-            println!("Operation failed: {}", e);
-        }
-    }
+#[divan::bench]
+fn bench_write_operation(bencher: divan::Bencher) {
+    let n:u32 = 1000;
+    bencher
+        .counter(divan::counter::ItemsCount::new(n))
+        .bench_local(move || {
+            let mut client = ScalerizeClient::connect().expect("Failed to connect");
+            client.write().expect("Write failed");
+        });
+}
 
-    // Check for any additional messages from the server
-    // client.check_additional_messages();
-    loop {
-        match client.read_full_response() {
-            Ok(response) => {
-                println!("Received message from server: {:?}", response);
+#[divan::bench]
+fn bench_full_cycle(bencher: divan::Bencher) {
+    let n: u32 = 1000;
+    bencher
+        .counter(divan::counter::ItemsCount::new(n))
+        .bench_local(move || {
+            let mut client = ScalerizeClient::connect().expect("Failed to connect");
+            let store_number = 2u8;
+            let key = vec![1, 2, 3, 4];
+            let value = b"Hello, Scalerize!";
+            
+            client.put(store_number, &key, value).expect("Put failed");
+            client.write().expect("Write failed");
+            client.get(store_number, &key).expect("Get failed");
+            client.delete(store_number, &key).expect("Delete failed");
+        });
+}
+
+fn main() -> Result<(), ClientError> {
+    if std::env::args().any(|arg| arg == "--bench") {
+        println!("Running benchmarks...");
+        divan::main();
+    } else {
+        // Your original main function code here
+        let mut client = ScalerizeClient::connect().expect("Failed to connect");
+        let store_number = 2u8;
+        let key = vec![1, 2, 3, 4];
+        let value: &[u8; 17] = b"Hello, Scalerize!";
+        
+        println!("Putting data...");
+        client.put(store_number, &key, value).expect("Put failed");
+
+        println!("Writing changes...");
+        client.write().expect("Write failed");
+
+        println!("Getting data...");
+        match client.get(store_number, &key) {
+            Ok(retrieved_value) => {
+                println!("Operation successful!");
+                println!("Retrieved value as string: {}", String::from_utf8_lossy(&retrieved_value));
             }
             Err(e) => {
-                eprintln!("Error receiving message: {}", e);
-                break;
+                println!("Operation failed: {}", e);
             }
         }
     }
 
+    // Ensure that we return Ok(()) at the end of the function
     Ok(())
 }
