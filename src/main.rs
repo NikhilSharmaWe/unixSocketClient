@@ -62,11 +62,10 @@ impl ScalerizeClient {
     }
 
     pub fn get(&mut self, store_number: u8, key: &[u8]) -> Result<Vec<u8>, ClientError> {
+        println!("KEY FOR GET: {:?}", key);
         let mut request = vec![OP_GET];
         request.extend_from_slice(&store_number.to_be_bytes());
         
-        let key_len = key.len() as u32;
-        request.extend_from_slice(&key_len.to_be_bytes());
         request.extend_from_slice(key);
         
         println!("GET REQUEST: {:?}", request);
@@ -86,11 +85,10 @@ impl ScalerizeClient {
     }
 
     pub fn put(&mut self, store_number: u8, key: &[u8], value: &[u8]) -> Result<(), ClientError> {
+        println!("KEY FOR PUT: {:?}", key);
         let mut request = vec![OP_PUT];
         request.extend_from_slice(&store_number.to_be_bytes());
         
-        let key_len = key.len() as u32;
-        request.extend_from_slice(&key_len.to_be_bytes());
         request.extend_from_slice(key);
         
         let value_len = value.len() as u32;
@@ -115,8 +113,6 @@ impl ScalerizeClient {
         let mut request = vec![OP_DELETE];
         request.extend_from_slice(&store_number.to_be_bytes());
         
-        let key_len = key.len() as u32;
-        request.extend_from_slice(&key_len.to_be_bytes());
         request.extend_from_slice(key);
         
         println!("DELETE REQUEST: {:?}", request);
